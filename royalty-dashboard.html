@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Royalty Mapping Dashboard</title>
+  <!-- Leaflet CSS -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      display: flex;
+      flex-direction: column;
+      background: #f7f6f2;
+      color: #222;
+    }
+    header {
+      padding: 12px 20px;
+      border-bottom: 1px solid #ddd3c7;
+      background: #fbfbf9;
+    }
+    header h1 {
+      font-size: 20px;
+      margin-bottom: 4px;
+    }
+    header p {
+      font-size: 13px;
+      color: #666;
+    }
+    main {
+      flex: 1;
+      display: flex;
+      min-height: 0;
+    }
+    .sidebar {
+      width: 320px;
+      max-width: 100%;
+      padding: 12px 16px 16px;
+      border-right: 1px solid #ddd3c7;
+      background: #f9f8f5;
+      overflow-y: auto;
+    }
+    .sidebar h2 {
+      font-size: 16px;
+      margin: 8px 0 4px;
+    }
+    .field {
+      margin-top: 8px;
+      font-size: 13px;
+    }
+    .field label {
+      display: block;
+      margin-bottom: 3px;
+      font-weight: 600;
+    }
+    .field select,
+    .field input {
+      width: 100%;
+      padding: 4px 6px;
+      font-size: 13px;
+      border-radius: 4px;
+      border: 1px solid #c9c6bd;
+      background: #fff;
+    }
+    .field-range {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .field-range input {
+      width: 50%;
+    }
+    .actions {
+      margin-top: 10px;
+      display: flex;
+      gap: 8px;
+    }
+    button {
+      padding: 6px 10px;
+      font-size: 13px;
+      border-radius: 4px;
+      border: 1px solid transparent;
+      cursor: pointer;
+    }
+    .btn-primary {
+      background: #01696f;
+      color: #fff;
+      border-color: #01696f;
+    }
+    .btn-secondary {
+      background: #f3f0ec;
+      color: #333;
+      border-color: #c9c6bd;
+    }
+    .content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+    .top-panel {
+      padding: 10px 14px;
+      border-bottom: 1px solid #ddd3c7;
+      background: #fbfbf9;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      align-items: center;
+      font-size: 13px;
+    }
+    .metric {
+      min-width: 140px;
+    }
+    .metric span {
+      display: block;
+    }
+    .metric-label {
+      color: #666;
+      font-size: 12px;
+    }
+    .metric-value {
+      font-weight: 600;
+      margin-top: 2px;
+    }
+    .map-table-wrapper {
+      flex: 1;
+      display: flex;
+      min-height: 0;
+    }
+    #map {
+      flex: 1;
+      min-width: 0;
+    }
+    .table-container {
+      width: 40%;
+      max-width: 520px;
+      min-width: 260px;
+      border-left: 1px solid #ddd3c7;
+      background: #fff;
+      overflow: auto;
+      font-size: 12px;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      min-width: 600px;
+    }
+    thead {
+      position: sticky;
+      top: 0;
+      background: #f3f0ec;
+      z-index: 1;
+    }
+    th, td {
+      padding: 4px 6px;
+      border-bottom: 1px solid #eee7db;
+      text-align: left;
+      white-space: nowrap;
+    }
+    th {
+      font-weight: 600;
+      font-size: 11px;
+    }
+    tbody tr:nth-child(even) {
+      background: #fbfbf9;
+    }
+    @media (max-width: 900px) {
+      main {
+        flex-direction: column;
+      }
+      .sidebar {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid #ddd3c7;
+      }
+      .map-table-wrapper {
+        flex-direction: column;
+      }
+      .table-container {
+        width: 100%;
+        max-width: none;
+        border-left: none;
+        border-top: 1px solid #ddd3c7;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Royalty Mapping Dashboard</h1>
+    <p>Upload a CSV or Excel file with royalty lines to explore income by country and filter by repertoire fields.</p>
+  </header>
+  <main>
+    <aside class="sidebar">
+      <h2>1. Upload data</h2>
+      <div class="field">
+        <label for="fileInput">CSV or Excel file</label>
+        <input id="fileInput" type="file" accept=".csv,.xlsx,.xls" />
+      </div>
+      <p style="margin-top:6px;font-size:12px;color:#666;">
+        Expected columns (header row): Royalty Account Name, Major Income Type Description, Income Type Description, Song Title, Dsp, Composers, Accounting Period, Income Amount, Reported Country of Sale.
+      </p>
+
+      <h2 style="margin-top:14px;">2. Filters</h2>
+      <div class="field">
+        <label for="royaltyAccountFilter">Royalty Account Name</label>
+        <select id="royaltyAccountFilter">
+          <option value="">All</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="majorIncomeFilter">Major Income Type Description</label>
+        <select id="majorIncomeFilter">
+          <option value="">All</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="incomeTypeFilter">Income Type Description</label>
+        <select id="incomeTypeFilter">
+          <option value="">All</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="dspFilter">DSP</label>
+        <select id="dspFilter">
+          <option value="">All</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="songFilter">Song Title</label>
+        <select id="songFilter">
+          <option value="">All</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="composerFilter">Composers</label>
+        <select id="composerFilter">
+          <option value="">All</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Accounting Period (year)</label>
+        <div class="field-range">
+          <input id="yearMin" type="number" placeholder="Min" />
+          <span style="font-size:12px;">to</span>
+          <input id="yearMax" type="number" placeholder="Max" />
+        </div>
+      </div>
+      <div class="field">
+        <label>Income Amount range</label>
+        <div class="field-range">
+          <input id="incomeMin" type="number" step="0.01" placeholder="Min" />
+          <input id="incomeMax" type="number" step="0.01" placeholder="Max" />
+        </div>
+      </div>
+      <div class="field">
+        <label for="countryFilter">Reported Country of Sale</label>
+        <select id="countryFilter">
+          <option value="">All</option>
+        </select>
+      </div>
+      <div class="actions">
+        <button id="resetFilters" class="btn-secondary" type="button">Reset filters</button>
+      </div>
+      <p style="margin-top:10px;font-size:11px;color:#777;">
+        To change the default year range or add/remove filters, edit the <code>DASHBOARD_CONFIG</code> section near the top of the script in this file.
+      </p>
+    </aside>
+
+    <section class="content">
+      <div class="top-panel">
+        <div class="metric">
+          <span class="metric-label">Records loaded</span>
+          <span id="recordsCount" class="metric-value">0</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">Records after filters</span>
+          <span id="filteredCount" class="metric-value">0</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">Total income (filtered)</span>
+          <span id="totalIncome" class="metric-value">0.00</span>
+        </div>
+      </div>
+      <div class="map-table-wrapper">
+        <div id="map"></div>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Royalty Account Name</th>
+                <th>Major Income</th>
+                <th>Income Type</th>
+                <th>Song Title</th>
+                <th>DSP</th>
+                <th>Composers</th>
+                <th>Accounting Period</th>
+                <th>Income</th>
+                <th>Country</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Leaflet JS -->
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+  <!-- SheetJS for Excel parsing -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" crossorigin="anonymous"></script>
+
+  <script>
+    // Simple configuration object that you can edit.
+    const DASHBOARD_CONFIG = {
+      defaultMinYear: 2019,
+      defaultMaxYear: 2024,
+      maxTableRows: 200
+    };
+
+    // Approximate latitude/longitude for country codes (extend as needed).
+    const COUNTRY_COORDS = {
+      GB: [55, -3],
+      US: [39, -98],
+      DE: [51, 9],
+      FR: [46, 2],
+      RU: [61, 100],
+      IN: [22, 78],
+      CH: [47, 8],
+      ES: [40, -4],
+      IT: [42.5, 12.5],
+      BR: [-10, -55],
+      CA: [56, -106],
+      AU: [-25, 133],
+      JP: [37, 138],
+      CN: [35, 103],
+      NL: [52.5, 5.75],
+      SE: [62, 15],
+      NO: [62, 10],
+      DK: [56, 10],
+      IE: [53, -8],
+      ZA: [-30, 25]
+    };
+
+    let map, markersLayer;
+    let allRecords = [];
+
+    function initMap() {
+      map = L.map('map').setView([20, 0], 2);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 5,
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(map);
+      markersLayer = L.layerGroup().addTo(map);
+    }
+
+    function clearMap() {
+      markersLayer.clearLayers();
+    }
+
+    function updateMap(records) {
+      clearMap();
+      if (!records.length) return;
+      const totalsByCountry = {};
+      for (const r of records) {
+        const country = r['Reported Country of Sale'];
+        if (!country) continue;
+        const code = String(country).trim().toUpperCase();
+        const amt = parseFloat(r['Income Amount']) || 0;
+        if (!totalsByCountry[code]) totalsByCountry[code] = 0;
+        totalsByCountry[code] += amt;
+      }
+      let maxValue = 0;
+      for (const c in totalsByCountry) {
+        if (totalsByCountry[c] > maxValue) maxValue = totalsByCountry[c];
+      }
+      for (const code in totalsByCountry) {
+        const coords = COUNTRY_COORDS[code];
+        if (!coords) continue;
+        const value = totalsByCountry[code];
+        const radius = 4 + (Math.sqrt(value) / Math.sqrt(maxValue || 1)) * 18;
+        const circle = L.circleMarker(coords, {
+          radius,
+          color: '#01696f',
+          weight: 1,
+          fillColor: '#01929a',
+          fillOpacity: 0.7
+        }).addTo(markersLayer);
+        circle.bindPopup(code + ': ' + value.toFixed(4));
+      }
+    }
+
+    function parseCSV(text) {
+      const lines = text.split(/\r?\n/).filter(l => l.trim().length);
+      if (!lines.length) return [];
+      const headers = lines[0].split(',').map(h => h.trim());
+      const rows = [];
+      for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].split(',');
+        if (!cols.length) continue;
+        const row = {};
+        headers.forEach((h, idx) => {
+          row[h] = (cols[idx] || '').trim();
+        });
+        rows.push(row);
+      }
+      return rows;
+    }
+
+    function handleFile(file) {
+      const reader = new FileReader();
+      const name = file.name.toLowerCase();
+      if (name.endsWith('.csv')) {
+        reader.onload = e => {
+          allRecords = parseCSV(e.target.result);
+          onDataLoaded();
+        };
+        reader.readAsText(file);
+      } else {
+        reader.onload = e => {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const sheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[sheetName];
+          allRecords = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+          onDataLoaded();
+        };
+        reader.readAsArrayBuffer(file);
+      }
+    }
+
+    function uniqueSorted(values) {
+      return Array.from(new Set(values.filter(v => v != null && String(v).trim() !== '')))
+        .map(v => String(v))
+        .sort((a, b) => a.localeCompare(b));
+    }
+
+    function populateFilterOptions() {
+      const get = id => document.getElementById(id);
+      const acct = get('royaltyAccountFilter');
+      const major = get('majorIncomeFilter');
+      const incomeType = get('incomeTypeFilter');
+      const dsp = get('dspFilter');
+      const song = get('songFilter');
+      const comp = get('composerFilter');
+      const country = get('countryFilter');
+
+      function setOptions(select, values) {
+        const current = select.value;
+        select.innerHTML = '<option value="">All</option>';
+        for (const v of values) {
+          const opt = document.createElement('option');
+          opt.value = v;
+          opt.textContent = v;
+          select.appendChild(opt);
+        }
+        if (values.includes(current)) select.value = current;
+      }
+
+      setOptions(acct, uniqueSorted(allRecords.map(r => r['Royalty Account Name'])));
+      setOptions(major, uniqueSorted(allRecords.map(r => r['Major Income Type Description'])));
+      setOptions(incomeType, uniqueSorted(allRecords.map(r => r['Income Type Description'])));
+      setOptions(dsp, uniqueSorted(allRecords.map(r => r['Dsp'])));
+      setOptions(song, uniqueSorted(allRecords.map(r => r['Song Title'])));
+      setOptions(comp, uniqueSorted(allRecords.map(r => r['Composers'])));
+      setOptions(country, uniqueSorted(allRecords.map(r => r['Reported Country of Sale'])));
+
+      const years = uniqueSorted(allRecords.map(r => {
+        const p = r['Accounting Period'];
+        if (!p) return null;
+        const s = String(p);
+        return s.slice(0, 4);
+      }).filter(Boolean));
+      const minYear = years.length ? parseInt(years[0], 10) : DASHBOARD_CONFIG.defaultMinYear;
+      const maxYear = years.length ? parseInt(years[years.length - 1], 10) : DASHBOARD_CONFIG.defaultMaxYear;
+      document.getElementById('yearMin').value = minYear;
+      document.getElementById('yearMax').value = maxYear;
+    }
+
+    function applyFilters() {
+      const get = id => document.getElementById(id);
+      const acct = get('royaltyAccountFilter').value;
+      const major = get('majorIncomeFilter').value;
+      const incomeType = get('incomeTypeFilter').value;
+      const dsp = get('dspFilter').value;
+      const song = get('songFilter').value;
+      const comp = get('composerFilter').value;
+      const yearMin = parseInt(get('yearMin').value || DASHBOARD_CONFIG.defaultMinYear, 10);
+      const yearMax = parseInt(get('yearMax').value || DASHBOARD_CONFIG.defaultMaxYear, 10);
+      const incomeMin = parseFloat(get('incomeMin').value || '');
+      const incomeMax = parseFloat(get('incomeMax').value || '');
+      const country = get('countryFilter').value;
+
+      const filtered = allRecords.filter(r => {
+        function match(field, value) {
+          if (!value) return true;
+          return String(r[field] || '').trim() === value;
+        }
+        if (!match('Royalty Account Name', acct)) return false;
+        if (!match('Major Income Type Description', major)) return false;
+        if (!match('Income Type Description', incomeType)) return false;
+        if (!match('Dsp', dsp)) return false;
+        if (!match('Song Title', song)) return false;
+        if (!match('Composers', comp)) return false;
+        if (!match('Reported Country of Sale', country)) return false;
+
+        const period = String(r['Accounting Period'] || '');
+        const year = parseInt(period.slice(0, 4) || '0', 10);
+        if (yearMin && year && year < yearMin) return false;
+        if (yearMax && year && year > yearMax) return false;
+
+        const amt = parseFloat(r['Income Amount'] || '0');
+        if (!isNaN(incomeMin) && amt < incomeMin) return false;
+        if (!isNaN(incomeMax) && amt > incomeMax) return false;
+
+        return true;
+      });
+
+      updateSummaryAndTable(filtered);
+      updateMap(filtered);
+    }
+
+    function updateSummaryAndTable(records) {
+      const recordsCountEl = document.getElementById('recordsCount');
+      const filteredCountEl = document.getElementById('filteredCount');
+      const totalIncomeEl = document.getElementById('totalIncome');
+      const tbody = document.getElementById('tableBody');
+
+      recordsCountEl.textContent = allRecords.length.toString();
+      filteredCountEl.textContent = records.length.toString();
+      const total = records.reduce((sum, r) => sum + (parseFloat(r['Income Amount'] || '0') || 0), 0);
+      totalIncomeEl.textContent = total.toFixed(4);
+
+      tbody.innerHTML = '';
+      const maxRows = DASHBOARD_CONFIG.maxTableRows;
+      records.slice(0, maxRows).forEach(r => {
+        const tr = document.createElement('tr');
+        function td(text) {
+          const cell = document.createElement('td');
+          cell.textContent = text == null ? '' : String(text);
+          tr.appendChild(cell);
+        }
+        td(r['Royalty Account Name']);
+        td(r['Major Income Type Description']);
+        td(r['Income Type Description']);
+        td(r['Song Title']);
+        td(r['Dsp']);
+        td(r['Composers']);
+        td(r['Accounting Period']);
+        td(r['Income Amount']);
+        td(r['Reported Country of Sale']);
+        tbody.appendChild(tr);
+      });
+    }
+
+    function onDataLoaded() {
+      document.getElementById('recordsCount').textContent = allRecords.length.toString();
+      populateFilterOptions();
+      applyFilters();
+    }
+
+    function resetFilters() {
+      const ids = ['royaltyAccountFilter','majorIncomeFilter','incomeTypeFilter','dspFilter','songFilter','composerFilter','countryFilter','incomeMin','incomeMax'];
+      ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+
+      const years = uniqueSorted(allRecords.map(r => {
+        const p = r['Accounting Period'];
+        if (!p) return null;
+        const s = String(p);
+        return s.slice(0, 4);
+      }).filter(Boolean));
+      const minYear = years.length ? parseInt(years[0], 10) : DASHBOARD_CONFIG.defaultMinYear;
+      const maxYear = years.length ? parseInt(years[years.length - 1], 10) : DASHBOARD_CONFIG.defaultMaxYear;
+      document.getElementById('yearMin').value = minYear;
+      document.getElementById('yearMax').value = maxYear;
+      applyFilters();
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+      initMap();
+      const fileInput = document.getElementById('fileInput');
+      fileInput.addEventListener('change', e => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        handleFile(file);
+      });
+
+      const filterIds = ['royaltyAccountFilter','majorIncomeFilter','incomeTypeFilter','dspFilter','songFilter','composerFilter','yearMin','yearMax','incomeMin','incomeMax','countryFilter'];
+      filterIds.forEach(id => {
+        const el = document.getElementById(id);
+        el.addEventListener('change', applyFilters);
+      });
+      document.getElementById('resetFilters').addEventListener('click', resetFilters);
+    });
+  </script>
+</body>
+</html>
